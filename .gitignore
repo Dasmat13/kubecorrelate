@@ -1,0 +1,7 @@
+# Compiled binaries
+bin/
+
+# Local/temporary files
+test-pod.yaml
+*.out
+*.test
