@@ -24,6 +24,7 @@ type Config struct {
 	LabelSelector string
 	PodRegex      string
 	Since         time.Duration
+	BufferDelay   time.Duration
 }
 
 type Manager struct {
@@ -47,7 +48,7 @@ func NewManager(client kubernetes.Interface, restConfig *rest.Config, config Con
 		restConfig:    restConfig,
 		config:        config,
 		eventChan:     eventChan,
-		printer:       printer.NewConsolePrinter(eventChan),
+		printer:       printer.NewConsolePrinter(eventChan, config.BufferDelay),
 		warnedKeys:    make(map[string]bool),
 		activePods:    make(map[string]context.CancelFunc),
 		activeNodes:   make(map[string]bool),

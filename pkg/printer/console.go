@@ -10,7 +10,6 @@ import (
 
 	"github.com/Dasmat13/kubecorrelate/pkg/watcher"
 )
-
 const (
 	colorReset  = "\033[0m"
 	colorRed    = "\033[31m"
@@ -22,21 +21,21 @@ const (
 	colorWhite  = "\033[37m"
 	colorBold   = "\033[1m"
 
-	// Bounded slop buffer parameters
-	slopDelay   = 1500 * time.Millisecond
 	flushTick   = 100 * time.Millisecond
 )
 
 type ConsolePrinter struct {
-	eventChan <-chan watcher.TelemetryEvent
-	buffer    []watcher.TelemetryEvent
-	mu        sync.Mutex
+	eventChan   <-chan watcher.TelemetryEvent
+	buffer      []watcher.TelemetryEvent
+	mu          sync.Mutex
+	bufferDelay time.Duration
 }
 
-func NewConsolePrinter(eventChan <-chan watcher.TelemetryEvent) *ConsolePrinter {
+func NewConsolePrinter(eventChan <-chan watcher.TelemetryEvent, bufferDelay time.Duration) *ConsolePrinter {
 	return &ConsolePrinter{
-		eventChan: eventChan,
-		buffer:    make([]watcher.TelemetryEvent, 0),
+		eventChan:   eventChan,
+		buffer:      make([]watcher.TelemetryEvent, 0),
+		bufferDelay: bufferDelay,
 	}
 }
 
@@ -82,7 +81,7 @@ func (p *ConsolePrinter) flushMature() {
 	}
 
 	now := time.Now()
-	matureThreshold := now.Add(-slopDelay)
+	matureThreshold := now.Add(-p.bufferDelay)
 
 	var mature []watcher.TelemetryEvent
 	var remaining []watcher.TelemetryEvent

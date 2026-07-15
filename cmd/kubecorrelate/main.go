@@ -19,12 +19,13 @@ import (
 
 func main() {
 	var (
-		kubeconfig    string
-		namespace     string
-		labelSelector string
-		podRegex      string
-		sinceStr      string
-		allNamespaces bool
+		kubeconfig     string
+		namespace      string
+		labelSelector  string
+		podRegex       string
+		sinceStr       string
+		bufferDelayStr string
+		allNamespaces  bool
 	)
 
 	// Determine default kubeconfig path
@@ -38,6 +39,7 @@ func main() {
 	flag.StringVar(&labelSelector, "l", "", "label selector to filter pods (e.g. app=my-app)")
 	flag.StringVar(&podRegex, "p", "", "regex pattern to filter pod names")
 	flag.StringVar(&sinceStr, "since", "10m", "stream logs since this duration (e.g. 5m, 1h)")
+	flag.StringVar(&bufferDelayStr, "buffer-delay", "1.5s", "chronological sorting buffer delay (e.g. 1s, 1.5s, 3s)")
 	flag.BoolVar(&allNamespaces, "A", false, "monitor all namespaces")
 
 	flag.Parse()
@@ -46,6 +48,12 @@ func main() {
 	since, err := time.ParseDuration(sinceStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: invalid duration value for --since: %v\n", err)
+		os.Exit(1)
+	}
+
+	bufferDelay, err := time.ParseDuration(bufferDelayStr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid duration value for --buffer-delay: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -92,6 +100,7 @@ func main() {
 		LabelSelector: labelSelector,
 		PodRegex:      podRegex,
 		Since:         since,
+		BufferDelay:   bufferDelay,
 	})
 
 	if err := mgr.Start(ctx); err != nil {
