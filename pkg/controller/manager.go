@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -26,24 +27,31 @@ type Config struct {
 }
 
 type Manager struct {
-	client     kubernetes.Interface
-	restConfig *rest.Config
-	config     Config
-	eventChan  chan watcher.TelemetryEvent
-	printer    *printer.ConsolePrinter
-	warnedMu   sync.Mutex
-	warnedKeys map[string]bool
+	client        kubernetes.Interface
+	restConfig    *rest.Config
+	config        Config
+	eventChan     chan watcher.TelemetryEvent
+	printer       *printer.ConsolePrinter
+	warnedMu      sync.Mutex
+	warnedKeys    map[string]bool
+	activePodsMu  sync.Mutex
+	activePods    map[string]context.CancelFunc
+	activeNodes   map[string]bool
+	activeConfigs map[string]bool
 }
 
 func NewManager(client kubernetes.Interface, restConfig *rest.Config, config Config) *Manager {
 	eventChan := make(chan watcher.TelemetryEvent, 1000)
 	return &Manager{
-		client:     client,
-		restConfig: restConfig,
-		config:     config,
-		eventChan:  eventChan,
-		printer:    printer.NewConsolePrinter(eventChan),
-		warnedKeys: make(map[string]bool),
+		client:        client,
+		restConfig:    restConfig,
+		config:        config,
+		eventChan:     eventChan,
+		printer:       printer.NewConsolePrinter(eventChan),
+		warnedKeys:    make(map[string]bool),
+		activePods:    make(map[string]context.CancelFunc),
+		activeNodes:   make(map[string]bool),
+		activeConfigs: make(map[string]bool),
 	}
 }
 
@@ -66,72 +74,103 @@ func (m *Manager) Start(ctx context.Context) error {
 		}
 	}
 
-	// 1. Initial Pod Discovery
-	fmt.Printf("Discovering pods in namespace %q matching selector %q...\n", m.config.Namespace, m.config.LabelSelector)
-	pods, err := m.discoverPods(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to discover pods: %w", err)
-	}
-
-	filteredPods := make([]corev1.Pod, 0)
-	for _, p := range pods {
-		if podRegexCompiled == nil || podRegexCompiled.MatchString(p.Name) {
-			filteredPods = append(filteredPods, p)
-		}
-	}
-
-	if len(filteredPods) == 0 {
-		fmt.Println("No matching pods found. Waiting for pods to appear...")
-	} else {
-		fmt.Printf("Found %d matching pods. Initializing watchers...\n", len(filteredPods))
-	}
-
 	// Start printer
 	go m.printer.Start(ctx)
 
-	// Manage active watchers in a sync group
+	listOptions := metav1.ListOptions{}
+	if m.config.LabelSelector != "" {
+		if _, err := labels.Parse(m.config.LabelSelector); err != nil {
+			return fmt.Errorf("invalid label selector: %w", err)
+		}
+		listOptions.LabelSelector = m.config.LabelSelector
+	}
+
+	fmt.Printf("Watching pods in namespace %q matching selector %q...\n", m.config.Namespace, m.config.LabelSelector)
+	podWatcher, err := m.client.CoreV1().Pods(m.config.Namespace).Watch(ctx, listOptions)
+	if err != nil {
+		return fmt.Errorf("failed to start pod watch: %w", err)
+	}
+	defer podWatcher.Stop()
+
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Spin up watchers for initially discovered pods
-	activeNodes := make(map[string]bool)
-	activeConfigs := make(map[string]bool)
+	// Monitoring Loop
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case event, ok := <-podWatcher.ResultChan():
+				if !ok {
+					// Watcher channel closed unexpectedly, attempt restart
+					var restartErr error
+					podWatcher, restartErr = m.client.CoreV1().Pods(m.config.Namespace).Watch(ctx, listOptions)
+					if restartErr != nil {
+						m.warnOnce("pod-watch-restart", "Failed to restart pod watcher: %v", restartErr)
+						time.Sleep(2 * time.Second)
+					}
+					continue
+				}
 
-	for _, pod := range filteredPods {
-		p := pod // pin
-		wg.Add(1)
-		go func(podObj corev1.Pod) {
-			defer wg.Done()
-			m.startWatchersForPod(ctx, podObj, activeNodes, activeConfigs)
-		}(p)
-	}
+				pod, ok := event.Object.(*corev1.Pod)
+				if !ok {
+					continue
+				}
+
+				// Apply regex filtering if configured
+				if podRegexCompiled != nil && !podRegexCompiled.MatchString(pod.Name) {
+					continue
+				}
+
+				switch event.Type {
+				case watch.Added, watch.Modified:
+					m.activePodsMu.Lock()
+					_, active := m.activePods[pod.Name]
+					if !active && pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
+						podCtx, cancelPod := context.WithCancel(ctx)
+						m.activePods[pod.Name] = cancelPod
+
+						wg.Add(1)
+						go func(p corev1.Pod) {
+							defer wg.Done()
+							m.startWatchersForPod(podCtx, p)
+						}(*pod)
+					}
+					m.activePodsMu.Unlock()
+
+				case watch.Deleted:
+					m.activePodsMu.Lock()
+					cancelPod, active := m.activePods[pod.Name]
+					if active {
+						cancelPod()
+						delete(m.activePods, pod.Name)
+					}
+					m.activePodsMu.Unlock()
+				}
+			}
+		}
+	}()
 
 	// Wait for context termination
 	<-ctx.Done()
+
+	// Cancel all active pod watcher contexts
+	m.activePodsMu.Lock()
+	for _, cancelPod := range m.activePods {
+		cancelPod()
+	}
+	m.activePodsMu.Unlock()
+
+	// Wait for all watcher goroutines to exit cleanly
 	wg.Wait()
 	close(m.eventChan)
 
 	return nil
 }
 
-func (m *Manager) discoverPods(ctx context.Context) ([]corev1.Pod, error) {
-	listOptions := metav1.ListOptions{}
-	if m.config.LabelSelector != "" {
-		if _, err := labels.Parse(m.config.LabelSelector); err != nil {
-			return nil, fmt.Errorf("invalid label selector: %w", err)
-		}
-		listOptions.LabelSelector = m.config.LabelSelector
-	}
-
-	podList, err := m.client.CoreV1().Pods(m.config.Namespace).List(ctx, listOptions)
-	if err != nil {
-		return nil, err
-	}
-	return podList.Items, nil
-}
-
-func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod, activeNodes map[string]bool, activeConfigs map[string]bool) {
+func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 	var wg sync.WaitGroup
 
 	// 1. Log Watcher
@@ -176,13 +215,15 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod, activ
 		}
 	}()
 
-	// 3. Node Health Watcher (only if node wasn't registered yet)
+	// 3. Node Health Watcher
 	if pod.Spec.NodeName != "" {
 		var registerNode bool
-		if !activeNodes[pod.Spec.NodeName] {
-			activeNodes[pod.Spec.NodeName] = true
+		m.activePodsMu.Lock()
+		if !m.activeNodes[pod.Spec.NodeName] {
+			m.activeNodes[pod.Spec.NodeName] = true
 			registerNode = true
 		}
+		m.activePodsMu.Unlock()
 
 		if registerNode {
 			wg.Add(1)
@@ -211,8 +252,14 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod, activ
 	for _, volume := range pod.Spec.Volumes {
 		if volume.ConfigMap != nil {
 			cmKey := fmt.Sprintf("%s/cm/%s", pod.Namespace, volume.ConfigMap.Name)
-			if !activeConfigs[cmKey] {
-				activeConfigs[cmKey] = true
+			m.activePodsMu.Lock()
+			register := !m.activeConfigs[cmKey]
+			if register {
+				m.activeConfigs[cmKey] = true
+			}
+			m.activePodsMu.Unlock()
+
+			if register {
 				wg.Add(1)
 				go func(cmName string) {
 					defer wg.Done()
@@ -226,8 +273,14 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod, activ
 		}
 		if volume.Secret != nil {
 			secKey := fmt.Sprintf("%s/sec/%s", pod.Namespace, volume.Secret.SecretName)
-			if !activeConfigs[secKey] {
-				activeConfigs[secKey] = true
+			m.activePodsMu.Lock()
+			register := !m.activeConfigs[secKey]
+			if register {
+				m.activeConfigs[secKey] = true
+			}
+			m.activePodsMu.Unlock()
+
+			if register {
 				wg.Add(1)
 				go func(secretName string) {
 					defer wg.Done()
@@ -243,4 +296,5 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod, activ
 
 	wg.Wait()
 }
+
 
