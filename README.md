@@ -36,6 +36,7 @@ Instead of switching tabs between `stern`, `kubectl get events -w`, and tracking
 - [How it Works](#-how-it-works)
 - [Prerequisites](#-prerequisites)
 - [Installation](#-installation)
+  - [Via Krew](#via-krew)
   - [From Releases](#from-releases)
   - [Building from Source](#building-from-source)
 - [Usage & Examples](#-usage--examples)
@@ -74,13 +75,20 @@ KubeCorrelate operates purely client-side using the Kubernetes API server. It st
 
 ## 🚀 Installation
 
+### Via Krew
+You can install KubeCorrelate as a `kubectl` plugin via Krew:
+```bash
+kubectl krew install correlate
+```
+Once installed, invoke it using `kubectl correlate`.
+
 ### From Releases
 Download the compiled release binary for your platform from the [Releases Page](https://github.com/Dasmat13/kubecorrelate/releases).
 
 ```bash
 # Example for Linux AMD64
-curl -L -O https://github.com/Dasmat13/kubecorrelate/releases/download/v0.1.1/kubecorrelate_Linux_x86_64.tar.gz
-tar -xzf kubecorrelate_Linux_x86_64.tar.gz
+curl -L -O https://github.com/Dasmat13/kubecorrelate/releases/download/v0.1.2/kubecorrelate_0.1.2_linux_amd64.tar.gz
+tar -xzf kubecorrelate_0.1.2_linux_amd64.tar.gz
 sudo mv kubecorrelate /usr/local/bin/
 ```
 
@@ -104,12 +112,13 @@ go build -o bin/kubecorrelate cmd/kubecorrelate/main.go
 
 ```text
 Usage of kubecorrelate:
-  -A             Monitor all namespaces
-  -kubeconfig    Absolute path to the kubeconfig file (defaults to ~/.kube/config)
-  -n string      Kubernetes namespace to monitor (default "default")
-  -l string      Label selector to filter pods (e.g. app=my-app)
-  -p string      Regex pattern to filter pod names (e.g. ^auth-.*$)
-  -since string  Stream logs since this duration (e.g. 5m, 1h, 24h) (default "10m")
+  -A                   Monitor all namespaces
+  -buffer-delay string chronological sorting buffer delay (e.g. 1s, 1.5s, 3s) (default "1.5s")
+  -kubeconfig string   Absolute path to the kubeconfig file (defaults to ~/.kube/config)
+  -n string            Kubernetes namespace to monitor (default "default")
+  -l string            Label selector to filter pods (e.g. app=my-app)
+  -p string            Regex pattern to filter pod names (e.g. ^auth-.*$)
+  -since string        Stream logs since this duration (e.g. 5m, 1h, 24h) (default "10m")
 ```
 
 ### Quick Start Recipes
