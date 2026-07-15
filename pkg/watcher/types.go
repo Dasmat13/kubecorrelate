@@ -26,3 +26,15 @@ const (
 	ConfigTypeConfigMap ConfigType = "ConfigMap"
 	ConfigTypeSecret    ConfigType = "Secret"
 )
+
+// FormatEventMessage formats a Kubernetes event message with a fallback to action if message is empty.
+func FormatEventMessage(severity, reason, message, action string) string {
+	msg := "[" + severity + "] " + reason
+	if message != "" {
+		return msg + ": " + message
+	}
+	if action != "" {
+		return msg + ": " + action
+	}
+	return msg
+}

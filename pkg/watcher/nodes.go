@@ -73,7 +73,7 @@ func (w *NodeWatcher) Watch(ctx context.Context, eventChan chan<- TelemetryEvent
 				severity = "WARN"
 			}
 
-			msg := fmt.Sprintf("[%s] %s: %s", severity, k8sEvent.Reason, k8sEvent.Message)
+			msg := FormatEventMessage(severity, k8sEvent.Reason, k8sEvent.Message, k8sEvent.Action)
 
 			eventChan <- TelemetryEvent{
 				Timestamp: eventTime,
