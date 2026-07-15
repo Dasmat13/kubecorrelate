@@ -19,14 +19,16 @@ type LogWatcher struct {
 	namespace string
 	podName   string
 	since     time.Duration
+	filter    string
 }
 
-func NewLogWatcher(client kubernetes.Interface, namespace, podName string, since time.Duration) *LogWatcher {
+func NewLogWatcher(client kubernetes.Interface, namespace, podName string, since time.Duration, filter string) *LogWatcher {
 	return &LogWatcher{
 		client:    client,
 		namespace: namespace,
 		podName:   podName,
 		since:     since,
+		filter:    filter,
 	}
 }
 
@@ -120,6 +122,12 @@ func (w *LogWatcher) streamContainerLogs(ctx context.Context, containerName stri
 			}
 
 			eventTimestamp, logMessage := ParseLogLine(line)
+
+			if w.filter != "" {
+				if !strings.Contains(strings.ToLower(logMessage), strings.ToLower(w.filter)) {
+					continue
+				}
+			}
 
 			eventChan <- TelemetryEvent{
 				Timestamp: eventTimestamp,

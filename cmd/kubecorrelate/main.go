@@ -25,6 +25,7 @@ func main() {
 		podRegex       string
 		sinceStr       string
 		bufferDelayStr string
+		filterStr      string
 		allNamespaces  bool
 	)
 
@@ -40,6 +41,8 @@ func main() {
 	flag.StringVar(&podRegex, "p", "", "regex pattern to filter pod names")
 	flag.StringVar(&sinceStr, "since", "10m", "stream logs since this duration (e.g. 5m, 1h)")
 	flag.StringVar(&bufferDelayStr, "buffer-delay", "1.5s", "chronological sorting buffer delay (e.g. 1s, 1.5s, 3s)")
+	flag.StringVar(&filterStr, "filter", "", "case-insensitive log filter substring")
+	flag.StringVar(&filterStr, "f", "", "case-insensitive log filter substring (shorthand)")
 	flag.BoolVar(&allNamespaces, "A", false, "monitor all namespaces")
 
 	flag.Parse()
@@ -101,6 +104,7 @@ func main() {
 		PodRegex:      podRegex,
 		Since:         since,
 		BufferDelay:   bufferDelay,
+		LogFilter:     filterStr,
 	})
 
 	if err := mgr.Start(ctx); err != nil {

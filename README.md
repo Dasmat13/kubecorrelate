@@ -114,6 +114,8 @@ go build -o bin/kubecorrelate cmd/kubecorrelate/main.go
 Usage of kubecorrelate:
   -A                   Monitor all namespaces
   -buffer-delay string chronological sorting buffer delay (e.g. 1s, 1.5s, 3s) (default "1.5s")
+  -filter string       Case-insensitive substring filter for container logs
+  -f string            Case-insensitive substring filter for container logs (shorthand)
   -kubeconfig string   Absolute path to the kubeconfig file (defaults to ~/.kube/config)
   -n string            Kubernetes namespace to monitor (default "default")
   -l string            Label selector to filter pods (e.g. app=my-app)

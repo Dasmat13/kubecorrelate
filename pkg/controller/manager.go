@@ -25,6 +25,7 @@ type Config struct {
 	PodRegex      string
 	Since         time.Duration
 	BufferDelay   time.Duration
+	LogFilter     string
 }
 
 type Manager struct {
@@ -178,7 +179,7 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logWatcher := watcher.NewLogWatcher(m.client, pod.Namespace, pod.Name, m.config.Since)
+		logWatcher := watcher.NewLogWatcher(m.client, pod.Namespace, pod.Name, m.config.Since, m.config.LogFilter)
 		if err := logWatcher.Watch(ctx, m.eventChan); err != nil {
 			if apierrors.IsForbidden(err) {
 				m.warnOnce("logs-"+pod.Namespace, "Log monitoring disabled in namespace %q due to insufficient RBAC permissions", pod.Namespace)
