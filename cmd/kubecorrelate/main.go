@@ -27,6 +27,11 @@ func main() {
 		bufferDelayStr string
 		filterStr      string
 		allNamespaces  bool
+		relativeTime   bool
+		errorsOnly     bool
+		timeline       bool
+		collapse       bool
+		podSummary     bool
 	)
 
 	// Determine default kubeconfig path
@@ -44,6 +49,11 @@ func main() {
 	flag.StringVar(&filterStr, "filter", "", "case-insensitive log filter substring")
 	flag.StringVar(&filterStr, "f", "", "case-insensitive log filter substring (shorthand)")
 	flag.BoolVar(&allNamespaces, "A", false, "monitor all namespaces")
+	flag.BoolVar(&relativeTime, "relative-time", false, "show relative timestamps instead of absolute time")
+	flag.BoolVar(&errorsOnly, "errors-only", false, "display only warning and failure events")
+	flag.BoolVar(&timeline, "timeline", false, "suppress verbose application logs and focus on major lifecycle events")
+	flag.BoolVar(&collapse, "collapse", true, "collapse repetitive log lines and deduplicate repeated events")
+	flag.BoolVar(&podSummary, "pod-summary", true, "print pod lifecycle summary checklist on pod termination")
 
 	flag.Parse()
 
@@ -105,6 +115,11 @@ func main() {
 		Since:         since,
 		BufferDelay:   bufferDelay,
 		LogFilter:     filterStr,
+		RelativeTime:  relativeTime,
+		ErrorsOnly:    errorsOnly,
+		Timeline:      timeline,
+		Collapse:      collapse,
+		PodSummary:    podSummary,
 	})
 
 	if err := mgr.Start(ctx); err != nil {

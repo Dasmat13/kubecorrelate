@@ -26,6 +26,11 @@ type Config struct {
 	Since         time.Duration
 	BufferDelay   time.Duration
 	LogFilter     string
+	RelativeTime  bool
+	ErrorsOnly    bool
+	Timeline      bool
+	Collapse      bool
+	PodSummary    bool
 }
 
 type Manager struct {
@@ -44,12 +49,20 @@ type Manager struct {
 
 func NewManager(client kubernetes.Interface, restConfig *rest.Config, config Config) *Manager {
 	eventChan := make(chan watcher.TelemetryEvent, 1000)
+	pConfig := printer.Config{
+		BufferDelay:  config.BufferDelay,
+		RelativeTime: config.RelativeTime,
+		ErrorsOnly:   config.ErrorsOnly,
+		Timeline:     config.Timeline,
+		Collapse:     config.Collapse,
+		PodSummary:   config.PodSummary,
+	}
 	return &Manager{
 		client:        client,
 		restConfig:    restConfig,
 		config:        config,
 		eventChan:     eventChan,
-		printer:       printer.NewConsolePrinter(eventChan, config.BufferDelay),
+		printer:       printer.NewConsolePrinter(eventChan, pConfig),
 		warnedKeys:    make(map[string]bool),
 		activePods:    make(map[string]context.CancelFunc),
 		activeNodes:   make(map[string]bool),
@@ -78,6 +91,59 @@ func (m *Manager) Start(ctx context.Context) error {
 
 	// Start printer
 	go m.printer.Start(ctx)
+
+	// Watch deployment/replicaset events to detect rollouts
+	go func() {
+		// Only watch if we have context
+		selector := "involvedObject.kind=Deployment"
+		opts := metav1.ListOptions{
+			FieldSelector: selector,
+			Watch:         true,
+		}
+		watcherConn, err := m.client.CoreV1().Events(m.config.Namespace).Watch(ctx, opts)
+		if err != nil {
+			return
+		}
+		defer watcherConn.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case eventObj, ok := <-watcherConn.ResultChan():
+				if !ok {
+					return
+				}
+				k8sEvent, ok := eventObj.Object.(*corev1.Event)
+				if !ok {
+					continue
+				}
+
+				// Skip older events
+				eventTime := k8sEvent.LastTimestamp.Time
+				if eventTime.IsZero() {
+					eventTime = k8sEvent.FirstTimestamp.Time
+				}
+				if eventTime.IsZero() {
+					eventTime = time.Now()
+				}
+				if time.Since(eventTime) > 1*time.Minute {
+					continue
+				}
+
+				if k8sEvent.Reason == "ScalingReplicaSet" {
+					m.eventChan <- watcher.TelemetryEvent{
+						Timestamp: eventTime,
+						Type:      watcher.TypeEvent,
+						Namespace: k8sEvent.Namespace,
+						PodName:   "", // Global to rollout
+						Message:   fmt.Sprintf("🚀 Rollout detected: %s", k8sEvent.Message),
+						Source:    k8sEvent.InvolvedObject.Name,
+					}
+				}
+			}
+		}
+	}()
 
 	listOptions := metav1.ListOptions{}
 	if m.config.LabelSelector != "" {
@@ -129,16 +195,27 @@ func (m *Manager) Start(ctx context.Context) error {
 				switch event.Type {
 				case watch.Added, watch.Modified:
 					m.activePodsMu.Lock()
-					_, active := m.activePods[pod.Name]
+					cancelPod, active := m.activePods[pod.Name]
 					if !active && pod.Status.Phase != corev1.PodSucceeded && pod.Status.Phase != corev1.PodFailed {
-						podCtx, cancelPod := context.WithCancel(ctx)
-						m.activePods[pod.Name] = cancelPod
+						podCtx, cancelPodNew := context.WithCancel(ctx)
+						m.activePods[pod.Name] = cancelPodNew
 
 						wg.Add(1)
 						go func(p corev1.Pod) {
 							defer wg.Done()
 							m.startWatchersForPod(podCtx, p)
 						}(*pod)
+					} else if active && (pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed) {
+						cancelPod()
+						delete(m.activePods, pod.Name)
+						m.eventChan <- watcher.TelemetryEvent{
+							Timestamp: time.Now(),
+							Type:      watcher.TypeEvent,
+							Namespace: pod.Namespace,
+							PodName:   pod.Name,
+							Message:   fmt.Sprintf("[INFO] Pod terminated/deleted (Phase: %s)", pod.Status.Phase),
+							Source:    "KubeCorrelate",
+						}
 					}
 					m.activePodsMu.Unlock()
 
@@ -148,6 +225,14 @@ func (m *Manager) Start(ctx context.Context) error {
 					if active {
 						cancelPod()
 						delete(m.activePods, pod.Name)
+						m.eventChan <- watcher.TelemetryEvent{
+							Timestamp: time.Now(),
+							Type:      watcher.TypeEvent,
+							Namespace: pod.Namespace,
+							PodName:   pod.Name,
+							Message:   "[INFO] Pod terminated/deleted",
+							Source:    "KubeCorrelate",
+						}
 					}
 					m.activePodsMu.Unlock()
 				}

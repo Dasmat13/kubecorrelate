@@ -36,3 +36,41 @@ func TestConsolePrinterBufferSorting(t *testing.T) {
 		t.Errorf("Expected third element to be 'Third event', got: %s", events[2].Message)
 	}
 }
+
+func TestConsolePrinterCollapseRepetitive(t *testing.T) {
+	printer := NewConsolePrinter(nil, Config{Collapse: true})
+
+	events := []watcher.TelemetryEvent{
+		{Type: watcher.TypeLog, Message: "start worker process 29", PodName: "nginx", Source: "container"},
+		{Type: watcher.TypeLog, Message: "start worker process 30", PodName: "nginx", Source: "container"},
+		{Type: watcher.TypeLog, Message: "start worker process 31", PodName: "nginx", Source: "container"},
+	}
+
+	collapsed := printer.collapseRepetitive(events)
+	if len(collapsed) != 1 {
+		t.Fatalf("Expected 1 collapsed event, got %d", len(collapsed))
+	}
+	expectedMsg := "start worker process 29-31 (collapsed 3 occurrences)"
+	if collapsed[0].Message != expectedMsg {
+		t.Errorf("Expected message '%s', got '%s'", expectedMsg, collapsed[0].Message)
+	}
+}
+
+func TestConsolePrinterDeduplicateEvents(t *testing.T) {
+	printer := NewConsolePrinter(nil, Config{Collapse: true})
+
+	events := []watcher.TelemetryEvent{
+		{Type: watcher.TypeEvent, Message: "Pulling image nginx", PodName: "nginx", Source: "kubelet"},
+		{Type: watcher.TypeEvent, Message: "Pulling image nginx", PodName: "nginx", Source: "kubelet"},
+		{Type: watcher.TypeEvent, Message: "Pulling image nginx", PodName: "nginx", Source: "kubelet"},
+	}
+
+	deduped := printer.deduplicateEvents(events)
+	if len(deduped) != 1 {
+		t.Fatalf("Expected 1 deduped event, got %d", len(deduped))
+	}
+	expectedMsg := "Pulling image nginx (x3)"
+	if deduped[0].Message != expectedMsg {
+		t.Errorf("Expected message '%s', got '%s'", expectedMsg, deduped[0].Message)
+	}
+}
