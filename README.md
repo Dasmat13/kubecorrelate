@@ -23,35 +23,7 @@ No more switching between multiple terminal windows running `stern`, `kubectl ge
 
 ## 🏗️ How it Works
 
-```
-                     +---------------------------------------+
-                     | KubeCorrelate Command-Line Invocation |
-                     +-------------------+-------------------+
-                                         |
-                       +-----------------+-----------------+
-                       |                                   |
-           +-----------v-----------+           +-----------v-----------+
-           |  Log Streaming Loop   |           |  Event Informer Loop  |
-           +-----------+-----------+           +-----------+-----------+
-                       |                                   |
-                       +-----------------+-----------------+
-                                         |
-                       +-----------------+-----------------+
-                       |                                   |
-           +-----------v-----------+           +-----------v-----------+
-           |   ConfigMap/Secrets   |           | Node Pressure Watcher |
-           +-----------+-----------+           +-----------+-----------+
-                       |                                   |
-                       +-----------------+-----------------+
-                                         |
-                       +-----------------v-----------------+
-                       |   Bounded Slop Sorting Buffer     |
-                       +-----------------+-----------------+
-                                         |
-                       +-----------------v-----------------+
-                       |      Unified Colorized TUI        |
-                       +-----------------------------------+
-```
+![KubeCorrelate Architecture and Data Flow Diagram](docs/assets/architecture.png)
 
 ---
 
