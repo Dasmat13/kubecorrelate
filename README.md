@@ -5,6 +5,8 @@
 
 **KubeCorrelate** (`kubecorrelate`) is a lightweight, high-utility CLI tool built in Go that simplifies Kubernetes microservice debugging. It merges application container logs, Kubernetes events, configuration shifts, and underlying node-level resource warnings into a single, time-aligned, color-coded stream.
 
+![KubeCorrelate Live Demo Screenshot](docs/assets/demo.png)
+
 No more switching between multiple terminal windows running `stern`, `kubectl get events -w`, and checking node conditions manually. KubeCorrelate stitches them together on your terminal in real time.
 
 ---
@@ -12,6 +14,7 @@ No more switching between multiple terminal windows running `stern`, `kubectl ge
 ## 💡 Why KubeCorrelate?
 
 * **Chronological Timeline:** Log lines, liveness probe failures, ConfigMap updates, and OOMKills are printed sequentially down to the millisecond.
+* **Dynamic Pod Discovery:** Automatically watches pod lifecycle events in real time. If a pod crashes and restarts, or if a deployment performs a rolling update, KubeCorrelate dynamically starts watching the new pods and detaches from the deleted ones.
 * **Bounded Slop Buffer:** Employs an artificial delay (1.5 seconds) to buffer and sort out-of-order streams caused by API aggregation and network delays before printing.
 * **Graceful Degradation:** Safely runs under limited developer RBAC credentials. If Node-level or Secret-level watches are unauthorized, the tool warns you once and degrades gracefully instead of crashing.
 * **API-Level Timestamps:** Force-enables Kubernetes log timestamps internally and automatically strips the header so your output stays clean, regardless of your application's formatting structure.
@@ -114,4 +117,4 @@ go test -v ./...
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENSE) file for details.
