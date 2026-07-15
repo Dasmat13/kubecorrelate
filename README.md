@@ -1,33 +1,91 @@
 # KubeCorrelate
 
-[![Go Version](https://img.shields.io/github/go-mod/go-version/Dasmat13/kubecorrelate)](https://golang.org)
-[![License](https://img.shields.io/github/license/Dasmat13/kubecorrelate)](LICENSE)
+<p align="center">
+  <a href="https://github.com/Dasmat13/kubecorrelate/actions/workflows/ci.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/Dasmat13/kubecorrelate/ci.yml?branch=main&label=CI&style=flat-square" alt="Build Status">
+  </a>
+  <a href="https://github.com/Dasmat13/kubecorrelate/releases">
+    <img src="https://img.shields.io/github/v/release/Dasmat13/kubecorrelate?style=flat-square&color=blue" alt="Latest Release">
+  </a>
+  <a href="https://golang.org">
+    <img src="https://img.shields.io/github/go-mod/go-version/Dasmat13/kubecorrelate?style=flat-square" alt="Go Version">
+  </a>
+  <a href="https://goreportcard.com/report/github.com/Dasmat13/kubecorrelate">
+    <img src="https://goreportcard.com/badge/github.com/Dasmat13/kubecorrelate?style=flat-square" alt="Go Report Card">
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/Dasmat13/kubecorrelate?style=flat-square&color=emerald" alt="License">
+  </a>
+</p>
 
-**KubeCorrelate** (`kubecorrelate`) is a lightweight, high-utility CLI tool built in Go that simplifies Kubernetes microservice debugging. It merges application container logs, Kubernetes events, configuration shifts, and underlying node-level resource warnings into a single, time-aligned, color-coded stream.
+**KubeCorrelate** (`kubecorrelate`) is a lightweight, zero-dependency CNCF-grade CLI debugging utility. It simplifies Kubernetes troubleshooting by multiplexing container logs, resource-level API events, dynamic configuration shifts, and underlying node pressures into a single, time-aligned, color-coded stream.
 
-![KubeCorrelate Live Demo Screenshot](docs/assets/demo.png)
-
-No more switching between multiple terminal windows running `stern`, `kubectl get events -w`, and checking node conditions manually. KubeCorrelate stitches them together on your terminal in real time.
+Instead of switching tabs between `stern`, `kubectl get events -w`, and tracking node pressure events manually, **KubeCorrelate** stitches all signals onto your terminal in real time, exposing the exact chronological root cause of application failures down to the millisecond.
 
 ---
 
-## 💡 Why KubeCorrelate?
+## 🎨 Terminal Stream in Action
 
-* **Chronological Timeline:** Log lines, liveness probe failures, ConfigMap updates, and OOMKills are printed sequentially down to the millisecond.
-* **Dynamic Pod Discovery:** Automatically watches pod lifecycle events in real time. If a pod crashes and restarts, or if a deployment performs a rolling update, KubeCorrelate dynamically starts watching the new pods and detaches from the deleted ones.
-* **Bounded Slop Buffer:** Employs an artificial delay (1.5 seconds) to buffer and sort out-of-order streams caused by API aggregation and network delays before printing.
-* **Graceful Degradation:** Safely runs under limited developer RBAC credentials. If Node-level or Secret-level watches are unauthorized, the tool warns you once and degrades gracefully instead of crashing.
-* **API-Level Timestamps:** Force-enables Kubernetes log timestamps internally and automatically strips the header so your output stays clean, regardless of your application's formatting structure.
+![KubeCorrelate Live Demo Screenshot](docs/assets/demo.png)
+
+---
+
+## 📖 Table of Contents
+
+- [Features](#-features)
+- [How it Works](#-how-it-works)
+- [Prerequisites](#-prerequisites)
+- [Installation](#-installation)
+  - [From Releases](#from-releases)
+  - [Building from Source](#building-from-source)
+- [Usage & Examples](#-usage--examples)
+  - [Command Options](#command-options)
+  - [Quick Start Recipes](#quick-start-recipes)
+- [Testing](#-testing)
+- [Community & Contributing](#-community--contributing)
+- [License](#-license)
+
+---
+
+## ✨ Features
+
+* **Chronological Telemetry Stream:** Aligns container standard output (stdout/stderr) with warning events, configuration writes, and infrastructure health notifications.
+* **Dynamic Pod Discovery:** Automatically tracks pod lifecycles. When containers crash, recreate, or roll out during deployments, KubeCorrelate dynamically connects to the new pod watches and tears down the old ones.
+* **Bounded Slop Sorting Buffer:** Implements a client-side 1.5s asynchronous queue that guarantees chronological event ordering, preventing logs and events from interleaving out of order due to network and API latency.
+* **Graceful RBAC Degradation:** Designed for locked-down clusters. If node or configuration watchers are forbidden, the tool outputs a single warning and keeps monitoring the remaining signals.
+* **Timestamp Normalization:** Injects native RFC3339 timestamps and sanitizes output formats so logs from mixed language runtimes align perfectly.
 
 ---
 
 ## 🏗️ How it Works
 
+KubeCorrelate operates purely client-side using the Kubernetes API server. It starts independent watching goroutines for each type of signal, queuing incoming items into a unified sorting multiplexer:
+
 ![KubeCorrelate Architecture and Data Flow Diagram](docs/assets/architecture.png)
 
 ---
 
+## 🚦 Prerequisites
+
+- **Kubernetes Cluster**: Compatible with Kubernetes `v1.20+`.
+- **Kubeconfig**: Valid credentials pointing to the target cluster (uses your active shell context or `$HOME/.kube/config`).
+
+---
+
 ## 🚀 Installation
+
+### From Releases
+Download the compiled release binary for your platform from the [Releases Page](https://github.com/Dasmat13/kubecorrelate/releases).
+
+```bash
+# Example for Linux AMD64
+curl -L -O https://github.com/Dasmat13/kubecorrelate/releases/download/v0.1.1/kubecorrelate_Linux_x86_64.tar.gz
+tar -xzf kubecorrelate_Linux_x86_64.tar.gz
+sudo mv kubecorrelate /usr/local/bin/
+```
+
+### Building from Source
+Requires Go `1.22+` installed.
 
 ```bash
 # Clone the repository
@@ -40,46 +98,45 @@ go build -o bin/kubecorrelate cmd/kubecorrelate/main.go
 
 ---
 
-## 📖 Usage
+## 📖 Usage & Examples
 
-Run it against target pods by specifying a namespace and label selector (uses your active `kubeconfig` context by default):
-
-```bash
-# Monitor default namespace using a label selector
-./bin/kubecorrelate -l app=order-processor
-
-# Monitor all namespaces
-./bin/kubecorrelate -A
-
-# Watch pods matching a specific name regex
-./bin/kubecorrelate -n staging -p "^api-gateway-[a-z0-9]+$"
-
-# Adjust logs starting lookback window (default is 10m)
-./bin/kubecorrelate -l app=auth-service --since 1h
-```
-
----
-
-## 🎨 Log Stream Output Example
-
-Here is how KubeCorrelate displays a unified debugging timeline when a database configuration changes right before an Out-Of-Memory (OOM) event occurs:
+### Command Options
 
 ```text
-[23:55:01.002] [LOG] [order-processor-7fd8b/processor] Processing order #98213...
-[23:55:02.155] [CONFIG] [processor-routing-rules] ConfigMap "processor-routing-rules" was modified (resourceVersion: 1084)
-[23:55:03.441] [LOG] [order-processor-7fd8b/processor] Reloading routing rules...
-[23:55:05.801] [EVENT] [order-processor-7fd8b] [WARN] LivenessProbeFailed: Liveness probe failed (HTTP 500)
-[23:55:05.912] [LOG] [order-processor-7fd8b/processor] Critical: Database connection timeout!
-[23:55:07.100] [NODE] [gke-node-pool-1a] [WARN] MemoryPressure: System memory usage exceeded 95%
-[23:55:07.350] [EVENT] [order-processor-7fd8b] [WARN] BackOff: Container restarted (Reason: OOMKilled, Exit Code 137)
-[23:55:10.021] [LOG] [order-processor-7fd8b/processor] Starting Order Processor v1.4.2...
+Usage of kubecorrelate:
+  -A             Monitor all namespaces
+  -kubeconfig    Absolute path to the kubeconfig file (defaults to ~/.kube/config)
+  -n string      Kubernetes namespace to monitor (default "default")
+  -l string      Label selector to filter pods (e.g. app=my-app)
+  -p string      Regex pattern to filter pod names (e.g. ^auth-.*$)
+  -since string  Stream logs since this duration (e.g. 5m, 1h, 24h) (default "10m")
+```
+
+### Quick Start Recipes
+
+#### 1. Monitor a Microservice in the Default Namespace
+Tail logs and events for all replicas of a specific app:
+```bash
+kubecorrelate -l app=order-processor
+```
+
+#### 2. Debug CrashLoops Across a Rolling Update
+Monitor a rolling deployment in a specific namespace while filtering pod names:
+```bash
+kubecorrelate -n staging -p "^frontend-.*$" --since 30m
+```
+
+#### 3. Monitor All Cluster Namespaces
+Monitor all pods across all namespaces matching a label:
+```bash
+kubecorrelate -A -l tier=backend
 ```
 
 ---
 
-## 🛠️ Running Tests
+## 🛠️ Testing
 
-To verify both the timestamp parsing and bounded slop buffer sorting modules, run:
+Verify timestamp parsing and bounded-slop sorting algorithms locally:
 
 ```bash
 go test -v ./...
@@ -87,6 +144,14 @@ go test -v ./...
 
 ---
 
+## 🤝 Community & Contributing
+
+We welcome contributions to KubeCorrelate! If you find a bug or have a feature suggestion, please open a Github issue or pull request.
+
+Please review our [Contributing Guidelines](CONTRIBUTING.md) for details on our code of conduct, development patterns, and PR submission process.
+
+---
+
 ## 📄 License
 
-This project is licensed under the Apache-2.0 License - see the [LICENSE](LICENSE) file for details.
+KubeCorrelate is licensed under the Apache License, Version 2.0. See the [LICENSE](LICENSE) file for details.
