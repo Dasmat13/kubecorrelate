@@ -106,6 +106,28 @@ go build -o bin/kubecorrelate cmd/kubecorrelate/main.go
 
 ---
 
+## 🧪 Interactive Simulation Demo
+
+Want to see KubeCorrelate debug real failures in real time? We provide a built-in simulator script that spins up a sandbox namespace with a `CrashLoopBackOff`, an `OOMKilled` pod, and a `Failed Rollout`.
+
+1. **Spin up the simulated incidents:**
+   ```bash
+   ./scripts/simulate-incidents.sh
+   ```
+
+2. **Watch them correlate in real time:**
+   ```bash
+   # Run the plugin (using the compiled binary)
+   ./bin/kubecorrelate -n kubecorrelate-demo
+   ```
+
+3. **Clean up the sandbox namespace:**
+   ```bash
+   kubectl delete namespace kubecorrelate-demo
+   ```
+
+---
+
 ## 📖 Usage & Examples
 
 ### Command Options
