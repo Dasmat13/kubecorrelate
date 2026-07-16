@@ -264,8 +264,16 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logWatcher := watcher.NewLogWatcher(m.client, pod.Namespace, pod.Name, m.config.Since, m.config.LogFilter)
-		if err := logWatcher.Watch(ctx, m.eventChan); err != nil {
+		backoff := 1 * time.Second
+		for {
+			logWatcher := watcher.NewLogWatcher(m.client, pod.Namespace, pod.Name, m.config.Since, m.config.LogFilter)
+			err := logWatcher.Watch(ctx, m.eventChan)
+			if err == nil {
+				return // Clean exit
+			}
+			if ctx.Err() != nil {
+				return
+			}
 			if apierrors.IsForbidden(err) {
 				m.warnOnce("logs-"+pod.Namespace, "Log monitoring disabled in namespace %q due to insufficient RBAC permissions", pod.Namespace)
 				return
@@ -275,8 +283,14 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 				Type:      watcher.TypeEvent,
 				Namespace: pod.Namespace,
 				PodName:   pod.Name,
-				Message:   fmt.Sprintf("Log watcher failed: %v", err),
+				Message:   fmt.Sprintf("[WARN] Log watcher failed, retrying in %v: %v", backoff, err),
 				Source:    "KubeCorrelate",
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+				backoff = min(backoff*2, 30*time.Second)
 			}
 		}
 	}()
@@ -285,8 +299,16 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		eventWatcher := watcher.NewEventWatcher(m.client, pod.Namespace, pod.Name)
-		if err := eventWatcher.Watch(ctx, m.eventChan); err != nil {
+		backoff := 1 * time.Second
+		for {
+			eventWatcher := watcher.NewEventWatcher(m.client, pod.Namespace, pod.Name)
+			err := eventWatcher.Watch(ctx, m.eventChan)
+			if err == nil {
+				return // Clean exit
+			}
+			if ctx.Err() != nil {
+				return
+			}
 			if apierrors.IsForbidden(err) {
 				m.warnOnce("events-"+pod.Namespace, "Pod event monitoring disabled in namespace %q due to insufficient RBAC permissions", pod.Namespace)
 				return
@@ -296,8 +318,14 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 				Type:      watcher.TypeEvent,
 				Namespace: pod.Namespace,
 				PodName:   pod.Name,
-				Message:   fmt.Sprintf("Event watcher failed: %v", err),
+				Message:   fmt.Sprintf("[WARN] Event watcher failed, retrying in %v: %v", backoff, err),
 				Source:    "KubeCorrelate",
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+				backoff = min(backoff*2, 30*time.Second)
 			}
 		}
 	}()
@@ -316,8 +344,16 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 			wg.Add(1)
 			go func(nodeName string) {
 				defer wg.Done()
-				nodeWatcher := watcher.NewNodeWatcher(m.client, nodeName)
-				if err := nodeWatcher.Watch(ctx, m.eventChan); err != nil {
+				backoff := 1 * time.Second
+				for {
+					nodeWatcher := watcher.NewNodeWatcher(m.client, nodeName)
+					err := nodeWatcher.Watch(ctx, m.eventChan)
+					if err == nil {
+						return // Clean exit
+					}
+					if ctx.Err() != nil {
+						return
+					}
 					if apierrors.IsForbidden(err) {
 						m.warnOnce("nodes", "Node pressure monitoring disabled due to insufficient cluster-wide RBAC permissions")
 						return
@@ -327,8 +363,14 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 						Type:      watcher.TypeNodePressure,
 						Namespace: pod.Namespace,
 						PodName:   pod.Name,
-						Message:   fmt.Sprintf("Node watcher for %s failed: %v", nodeName, err),
+						Message:   fmt.Sprintf("[WARN] Node watcher for %s failed, retrying in %v: %v", nodeName, backoff, err),
 						Source:    nodeName,
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(backoff):
+						backoff = min(backoff*2, 30*time.Second)
 					}
 				}
 			}(pod.Spec.NodeName)
@@ -350,10 +392,34 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 				wg.Add(1)
 				go func(cmName string) {
 					defer wg.Done()
-					configWatcher := watcher.NewConfigWatcher(m.client, pod.Namespace, cmName, watcher.ConfigTypeConfigMap)
-					err := configWatcher.Watch(ctx, m.eventChan)
-					if err != nil && apierrors.IsForbidden(err) {
-						m.warnOnce("configmaps-"+pod.Namespace, "ConfigMap change tracking disabled in namespace %q due to insufficient RBAC permissions", pod.Namespace)
+					backoff := 1 * time.Second
+					for {
+						configWatcher := watcher.NewConfigWatcher(m.client, pod.Namespace, cmName, watcher.ConfigTypeConfigMap)
+						err := configWatcher.Watch(ctx, m.eventChan)
+						if err == nil {
+							return // Clean exit
+						}
+						if ctx.Err() != nil {
+							return
+						}
+						if apierrors.IsForbidden(err) {
+							m.warnOnce("configmaps-"+pod.Namespace, "ConfigMap change tracking disabled in namespace %q due to insufficient RBAC permissions", pod.Namespace)
+							return
+						}
+						m.eventChan <- watcher.TelemetryEvent{
+							Timestamp: time.Now(),
+							Type:      watcher.TypeConfigChange,
+							Namespace: pod.Namespace,
+							PodName:   "",
+							Message:   fmt.Sprintf("[WARN] ConfigMap watcher for %s failed, retrying in %v: %v", cmName, backoff, err),
+							Source:    cmName,
+						}
+						select {
+						case <-ctx.Done():
+							return
+						case <-time.After(backoff):
+							backoff = min(backoff*2, 30*time.Second)
+						}
 					}
 				}(volume.ConfigMap.Name)
 			}
@@ -371,10 +437,34 @@ func (m *Manager) startWatchersForPod(ctx context.Context, pod corev1.Pod) {
 				wg.Add(1)
 				go func(secretName string) {
 					defer wg.Done()
-					configWatcher := watcher.NewConfigWatcher(m.client, pod.Namespace, secretName, watcher.ConfigTypeSecret)
-					err := configWatcher.Watch(ctx, m.eventChan)
-					if err != nil && apierrors.IsForbidden(err) {
-						m.warnOnce("secrets-"+pod.Namespace, "Secret change tracking disabled in namespace %q due to insufficient RBAC permissions", pod.Namespace)
+					backoff := 1 * time.Second
+					for {
+						configWatcher := watcher.NewConfigWatcher(m.client, pod.Namespace, secretName, watcher.ConfigTypeSecret)
+						err := configWatcher.Watch(ctx, m.eventChan)
+						if err == nil {
+							return // Clean exit
+						}
+						if ctx.Err() != nil {
+							return
+						}
+						if apierrors.IsForbidden(err) {
+							m.warnOnce("secrets-"+pod.Namespace, "Secret change tracking disabled in namespace %q due to insufficient RBAC permissions", pod.Namespace)
+							return
+						}
+						m.eventChan <- watcher.TelemetryEvent{
+							Timestamp: time.Now(),
+							Type:      watcher.TypeConfigChange,
+							Namespace: pod.Namespace,
+							PodName:   "",
+							Message:   fmt.Sprintf("[WARN] Secret watcher for %s failed, retrying in %v: %v", secretName, backoff, err),
+							Source:    secretName,
+						}
+						select {
+						case <-ctx.Done():
+							return
+						case <-time.After(backoff):
+							backoff = min(backoff*2, 30*time.Second)
+						}
 					}
 				}(volume.Secret.SecretName)
 			}

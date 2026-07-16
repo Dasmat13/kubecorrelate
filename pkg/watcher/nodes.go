@@ -47,7 +47,10 @@ func (w *NodeWatcher) Watch(ctx context.Context, eventChan chan<- TelemetryEvent
 			}
 
 			if eventObj.Type == watch.Error {
-				continue
+				if status, ok := eventObj.Object.(*metav1.Status); ok {
+					return fmt.Errorf("apiserver watch error: %s", status.Message)
+				}
+				return fmt.Errorf("unknown apiserver watch error")
 			}
 
 			k8sEvent, ok := eventObj.Object.(*corev1.Event)

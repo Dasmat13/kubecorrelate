@@ -49,7 +49,10 @@ func (w *EventWatcher) Watch(ctx context.Context, eventChan chan<- TelemetryEven
 			}
 
 			if eventObj.Type == watch.Error {
-				continue
+				if status, ok := eventObj.Object.(*metav1.Status); ok {
+					return fmt.Errorf("apiserver watch error: %s", status.Message)
+				}
+				return fmt.Errorf("unknown apiserver watch error")
 			}
 
 			// Parse Event object

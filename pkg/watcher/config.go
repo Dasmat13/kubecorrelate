@@ -60,7 +60,10 @@ func (w *ConfigWatcher) Watch(ctx context.Context, eventChan chan<- TelemetryEve
 			}
 
 			if eventObj.Type == watch.Error {
-				continue
+				if status, ok := eventObj.Object.(*metav1.Status); ok {
+					return fmt.Errorf("apiserver watch error: %s", status.Message)
+				}
+				return fmt.Errorf("unknown apiserver watch error")
 			}
 
 			var version string
