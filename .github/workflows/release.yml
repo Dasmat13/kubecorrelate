@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -34,7 +35,5 @@ jobs:
 
       - name: Update new version in krew-index
         uses: rajatjindal/krew-release-bot@v0.0.46
-        # Note: requires KREW_RELEASE_BOT_TOKEN secret in repository settings
-        # to authenticate and push updates to the krew-index repository.
-        # env:
-        #   KREW_RELEASE_BOT_TOKEN: ${{ secrets.KREW_RELEASE_BOT_TOKEN }}
+        env:
+          KREW_RELEASE_BOT_TOKEN: ${{ secrets.KREW_RELEASE_BOT_TOKEN }}
