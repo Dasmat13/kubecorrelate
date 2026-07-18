@@ -1,0 +1,82 @@
+apiVersion: krew.googlecontainertools.github.com/v1alpha2
+kind: Plugin
+metadata:
+  name: correlate
+spec:
+  version: "{{ .TagName }}"
+  homepage: https://github.com/Dasmat13/kubecorrelate
+  shortDescription: Merge logs, events, and node pressures chronologically
+  description: |
+    KubeCorrelate is a lightweight CLI troubleshooting tool that multiplexes
+    pod container logs, Kubernetes events, config updates, and node-level
+    resource pressure alerts into a single time-aligned, colorized stream.
+  caveats: |
+    Requires an active kubeconfig context. Some features like Node watches
+    might require permissions that fallback gracefully if missing.
+  platforms:
+  - selector:
+      matchLabels:
+        os: darwin
+        arch: amd64
+    {{ addURIAndSha (printf "https://github.com/Dasmat13/kubecorrelate/releases/download/{{ .TagName }}/kubecorrelate_%s_darwin_amd64.tar.gz" (slice .TagName 1)) .TagName }}
+    bin: kubecorrelate
+    files:
+    - from: "kubecorrelate"
+      to: "."
+    - from: "LICENSE"
+      to: "."
+  - selector:
+      matchLabels:
+        os: darwin
+        arch: arm64
+    {{ addURIAndSha (printf "https://github.com/Dasmat13/kubecorrelate/releases/download/{{ .TagName }}/kubecorrelate_%s_darwin_arm64.tar.gz" (slice .TagName 1)) .TagName }}
+    bin: kubecorrelate
+    files:
+    - from: "kubecorrelate"
+      to: "."
+    - from: "LICENSE"
+      to: "."
+  - selector:
+      matchLabels:
+        os: linux
+        arch: amd64
+    {{ addURIAndSha (printf "https://github.com/Dasmat13/kubecorrelate/releases/download/{{ .TagName }}/kubecorrelate_%s_linux_amd64.tar.gz" (slice .TagName 1)) .TagName }}
+    bin: kubecorrelate
+    files:
+    - from: "kubecorrelate"
+      to: "."
+    - from: "LICENSE"
+      to: "."
+  - selector:
+      matchLabels:
+        os: linux
+        arch: arm64
+    {{ addURIAndSha (printf "https://github.com/Dasmat13/kubecorrelate/releases/download/{{ .TagName }}/kubecorrelate_%s_linux_arm64.tar.gz" (slice .TagName 1)) .TagName }}
+    bin: kubecorrelate
+    files:
+    - from: "kubecorrelate"
+      to: "."
+    - from: "LICENSE"
+      to: "."
+  - selector:
+      matchLabels:
+        os: windows
+        arch: amd64
+    {{ addURIAndSha (printf "https://github.com/Dasmat13/kubecorrelate/releases/download/{{ .TagName }}/kubecorrelate_%s_windows_amd64.zip" (slice .TagName 1)) .TagName }}
+    bin: kubecorrelate.exe
+    files:
+    - from: "kubecorrelate.exe"
+      to: "."
+    - from: "LICENSE"
+      to: "."
+  - selector:
+      matchLabels:
+        os: windows
+        arch: arm64
+    {{ addURIAndSha (printf "https://github.com/Dasmat13/kubecorrelate/releases/download/{{ .TagName }}/kubecorrelate_%s_windows_arm64.zip" (slice .TagName 1)) .TagName }}
+    bin: kubecorrelate.exe
+    files:
+    - from: "kubecorrelate.exe"
+      to: "."
+    - from: "LICENSE"
+      to: "."
