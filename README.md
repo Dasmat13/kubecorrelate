@@ -18,9 +18,7 @@
   </a>
 </p>
 
-**KubeCorrelate** (`kubecorrelate`) is a lightweight, zero-dependency CNCF-grade CLI debugging utility. It simplifies Kubernetes troubleshooting by multiplexing container logs, resource-level API events, dynamic configuration shifts, and underlying node pressures into a single, time-aligned, color-coded stream.
-
-Instead of switching tabs between `stern`, `kubectl get events -w`, and tracking node pressure events manually, **KubeCorrelate** stitches all signals onto your terminal in real time, exposing the exact chronological root cause of application failures down to the millisecond.
+**KubeCorrelate** is a lightweight, single-binary Kubernetes troubleshooting CLI available through Krew. It combines container logs, Kubernetes events, configuration changes, and node-condition signals into one time-aligned terminal stream, helping operators identify likely root causes by showing logs, events, configuration changes, and node conditions on one chronological timeline without switching between multiple commands and tools.
 
 ---
 
@@ -37,6 +35,7 @@ Instead of switching tabs between `stern`, `kubectl get events -w`, and tracking
 - [Prerequisites](#-prerequisites)
 - [Installation](#-installation)
   - [Via Krew](#via-krew)
+  - [Go Install](#go-install)
   - [From Releases](#from-releases)
   - [Building from Source](#building-from-source)
 - [Usage & Examples](#-usage--examples)
@@ -82,13 +81,21 @@ kubectl krew install correlate
 ```
 Once installed, invoke it using `kubectl correlate`.
 
+### Go Install
+Requires Go `1.22+` installed.
+
+```bash
+go install github.com/Dasmat13/kubecorrelate/cmd/kubecorrelate@latest
+```
+
 ### From Releases
 Download the compiled release binary for your platform from the [Releases Page](https://github.com/Dasmat13/kubecorrelate/releases).
 
 ```bash
 # Example for Linux AMD64
-curl -L -O https://github.com/Dasmat13/kubecorrelate/releases/download/v0.1.2/kubecorrelate_0.1.2_linux_amd64.tar.gz
-tar -xzf kubecorrelate_0.1.2_linux_amd64.tar.gz
+VERSION=v0.1.5
+curl -LO "https://github.com/Dasmat13/kubecorrelate/releases/download/${VERSION}/kubecorrelate_${VERSION#v}_linux_amd64.tar.gz"
+tar -xzf "kubecorrelate_${VERSION#v}_linux_amd64.tar.gz"
 sudo mv kubecorrelate /usr/local/bin/
 ```
 
@@ -150,19 +157,31 @@ Usage of kubecorrelate:
 #### 1. Monitor a Microservice in the Default Namespace
 Tail logs and events for all replicas of a specific app:
 ```bash
+# Standalone binary
 kubecorrelate -l app=order-processor
+
+# Krew plugin
+kubectl correlate -l app=order-processor
 ```
 
 #### 2. Debug CrashLoops Across a Rolling Update
 Monitor a rolling deployment in a specific namespace while filtering pod names:
 ```bash
+# Standalone binary
 kubecorrelate -n staging -p "^frontend-.*$" --since 30m
+
+# Krew plugin
+kubectl correlate -n staging -p "^frontend-.*$" --since 30m
 ```
 
 #### 3. Monitor All Cluster Namespaces
 Monitor all pods across all namespaces matching a label:
 ```bash
+# Standalone binary
 kubecorrelate -A -l tier=backend
+
+# Krew plugin
+kubectl correlate -A -l tier=backend
 ```
 
 ---
