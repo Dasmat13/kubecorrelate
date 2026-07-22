@@ -2,6 +2,15 @@ apiVersion: krew.googlecontainertools.github.com/v1alpha2
 kind: Plugin
 metadata:
   name: correlate
+  annotations:
+    artifacthub.io/category: monitoring-logging
+    artifacthub.io/displayName: KubeCorrelate
+    artifacthub.io/keywords: |
+      - kubernetes
+      - logging
+      - monitoring
+      - events
+      - troubleshooting
 spec:
   version: "{{ .TagName }}"
   homepage: https://github.com/Dasmat13/kubecorrelate
